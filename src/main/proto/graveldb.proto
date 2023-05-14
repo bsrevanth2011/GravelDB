@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "io.bsrevanth2011.github.graveldb";
+option java_outer_classname = "GravelDBProto";
+
+package graveldb;
+
+service GravelDB {
+  rpc RequestVote(VoteRequest) returns (VoteResponse) {}
+//  rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse) {}
+  rpc BeatHeart(HeartBeat) returns (Empty) {}
+}
+
+
+message VoteRequest {
+  uint32 term = 1;    // candidate's term
+  uint32 candidateId = 2;   // candidate requesting vote
+  uint32 lastLogTerm = 3;   // term of candidate's last log entry
+  uint32 lastLogIndex = 4;    // index of candidate's last log entry
+}
+
+message VoteResponse {
+  uint32 term = 1;    // currentTerm, for candidate to update itself
+  bool voteGranted = 2;   // true means candidate received vote
+}
+
+message AppendEntriesRequest {
+
+}
+
+message AppendEntriesResponse {
+
+}
+
+message HeartBeat {
+  uint32 id = 1;
+}
+
+message Empty {
+}
