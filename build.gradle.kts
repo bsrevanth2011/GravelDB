@@ -39,6 +39,10 @@ dependencies {
     implementation("io.grpc:grpc-stub:1.54.1")
     compileOnly("org.apache.tomcat:annotations-api:6.0.53") // necessary for Java 9+
 
+    // logging
+    implementation("org.slf4j:slf4j-api:2.0.7")
+    implementation("ch.qos.logback:logback-classic:1.4.7")
+
     // utility libraries
     implementation("org.eclipse.collections:eclipse-collections:11.1.0")
 
