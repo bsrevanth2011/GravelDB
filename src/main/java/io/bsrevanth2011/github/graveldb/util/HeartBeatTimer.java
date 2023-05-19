@@ -1,7 +1,6 @@
-package io.bsrevanth2011.github.graveldb.server.util;
+package io.bsrevanth2011.github.graveldb.util;
 
 import io.bsrevanth2011.github.graveldb.server.GravelDBServerConfiguration;
-import io.bsrevanth2011.github.graveldb.server.GravelDBServerUtil;
 
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledThreadPoolExecutor;

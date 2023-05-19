@@ -1,4 +1,4 @@
-package io.bsrevanth2011.github.graveldb.server.util;
+package io.bsrevanth2011.github.graveldb.util;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.bsrevanth2011.github.graveldb.server.GravelDBServerConfiguration;

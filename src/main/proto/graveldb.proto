@@ -6,20 +6,22 @@ option java_outer_classname = "GravelDBProto";
 
 package graveldb;
 
+// consensus service protocol buffers
 service GravelDBConsensusService {
   rpc RequestInstanceId(Info) returns (Info) {}
   rpc RequestVote(VoteRequest) returns (VoteResponse) {}
   rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse) {}
+  rpc GetMaster(Empty) returns (Info) {}
+  rpc GetConsensus(Command) returns (Consensus) {}
 }
-
-//service GravelDBService {
-//  rpc Get() returns () {}
-//  rpc Put() returns () {}
-//  rpc Delete() returns () {}
-//}
 
 message Info {
   string instanceId = 1;
+  optional bool isLeader = 2;
+}
+
+message Consensus {
+  bool achieved = 1;
 }
 
 message VoteRequest {
@@ -39,7 +41,7 @@ message AppendEntriesRequest {
   string leaderId = 2;    // so follower can redirect clients
   uint32 prevLogIndex  = 3;   // index of log entry immediately preceding new ones
   uint32 prevLogTerm = 4;   // term of prevLogIndex entry
-  repeated string entries = 5;    // log entries to store (empty for heartbeat; may send more than one for efficiency)
+  repeated Entry entries = 5;    // log entries to store (empty for heartbeat; may send more than one for efficiency)
   uint32 leaderCommit = 6;    // leader’s commitIndex
 }
 
@@ -48,3 +50,49 @@ message AppendEntriesResponse {
   bool success  = 2;    // true if follower contained entry matching prevLogIndex and prevLogTerm
 }
 
+// key value store protocol buffers
+service KVStore {
+  rpc Get(Key) returns (Value) {}
+  rpc Put(KeyValuePair) returns (Empty) {}
+  rpc Delete(Key) returns (Empty) {}
+}
+
+message Key {
+  string key = 1;
+}
+
+message Value {
+  string value = 1;
+}
+
+message KeyValuePair {
+  Key key = 1;
+  Value value = 2;
+}
+
+message Empty {}
+
+message Entry {
+  uint32 term = 1;
+  Command command = 2;
+}
+
+message Command {
+  enum Op {
+    NOP = 0;
+    GET = 1;
+    PUT = 2;
+    DELETE = 3;
+  }
+  Op op = 1;
+  Data data = 2;
+}
+
+message Data {
+  optional Key key = 1;
+  optional KeyValuePair keyValuePair = 2;
+}
+
+message Index {
+  uint32 index = 1;
+}

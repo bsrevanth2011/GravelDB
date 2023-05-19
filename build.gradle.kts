@@ -39,12 +39,16 @@ dependencies {
     implementation("io.grpc:grpc-stub:1.54.1")
     compileOnly("org.apache.tomcat:annotations-api:6.0.53") // necessary for Java 9+
 
+    // rocksdb
+    implementation("org.rocksdb:rocksdbjni:8.1.1.1")
+
     // logging
     implementation("org.slf4j:slf4j-api:2.0.7")
     implementation("ch.qos.logback:logback-classic:1.4.7")
 
     // utility libraries
     implementation("org.eclipse.collections:eclipse-collections:11.1.0")
+    implementation("org.apache.commons:commons-configuration2:2.9.0")
 
     // test
     testImplementation(platform("org.junit:junit-bom:5.9.1"))

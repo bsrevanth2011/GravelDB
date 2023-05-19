@@ -1,4 +1,4 @@
-package io.bsrevanth2011.github.graveldb.server.util;
+package io.bsrevanth2011.github.graveldb.util;
 
 import io.bsrevanth2011.github.graveldb.server.GravelDBServerConfiguration;
 import org.slf4j.Logger;
@@ -20,11 +20,6 @@ public final class ElectionTimer {
         this.callback = callback;
     }
 
-    public static ElectionTimer createStarted(Runnable runnable) {
-        ElectionTimer electionTimer = new ElectionTimer(runnable);
-        electionTimer.start();
-        return electionTimer;
-    }
     public void start() {
         long delay = generateRandomDelay();
         logger.info("Started election timer with delay of := " + delay);
