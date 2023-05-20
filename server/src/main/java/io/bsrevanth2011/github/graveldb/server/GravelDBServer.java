@@ -1,11 +1,10 @@
 package io.bsrevanth2011.github.graveldb.server;
 
-import io.bsrevanth2011.github.graveldb.log.Log;
-import io.bsrevanth2011.github.graveldb.log.PersistentLog;
 import io.bsrevanth2011.github.graveldb.util.ContextAwareThreadPoolExecutor;
 import io.grpc.Channel;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import org.rocksdb.RocksDBException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,10 +22,9 @@ public class GravelDBServer {
     /**
      * Create a GravelDB server using serverBuilder as a base and features as data.
      */
-    public GravelDBServer(String instanceId, int port, List<? extends Channel> channels, Map<String, String> dbConf) {
+    public GravelDBServer(String instanceId, int port, List<? extends Channel> channels, Map<String, String> dbConf) throws RocksDBException, IOException {
 
         logger.info("Instantiated server with instance id := " + instanceId);
-        Log log = new PersistentLog();
 
         int threadPoolSize = channels.size();
 
@@ -34,7 +32,7 @@ public class GravelDBServer {
                 .forPort(port)
                 .executor(ContextAwareThreadPoolExecutor
                         .newWithContext(threadPoolSize, threadPoolSize, Integer.MAX_VALUE, TimeUnit.MILLISECONDS))
-                .addService(new GravelDBConsensusService(instanceId, channels))
+                .addService(new GravelDBConsensusService(instanceId, channels, dbConf))
                 .build();
 
         logger.info("Started server on port := " + port);

@@ -1,14 +1,15 @@
 package io.bsrevanth2011.github.graveldb.log;
 
 import io.bsrevanth2011.github.graveldb.Entry;
+import org.rocksdb.RocksDBException;
 
 public interface Log {
 
     void appendEntry(int index, Entry entry);
 
-    void getLastLogTerm();
+    int getLastLogTerm();
 
-    void getLastLogIndex();
+    int getLastLogIndex();
 
     void deleteLastEntry();
 
@@ -16,6 +17,6 @@ public interface Log {
 
     Entry getLastEntry();
 
-    int getLastApplied(int consumerId);
+    int getLastApplied();
 
 }

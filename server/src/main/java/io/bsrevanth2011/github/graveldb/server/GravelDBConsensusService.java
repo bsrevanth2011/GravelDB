@@ -11,9 +11,11 @@ import io.grpc.Channel;
 import io.grpc.stub.StreamObserver;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.factory.Maps;
+import org.rocksdb.RocksDBException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,9 +33,11 @@ public class GravelDBConsensusService extends GravelDBConsensusServiceGrpc.Grave
     private final State state;
 
     public GravelDBConsensusService(String instanceId,
-                                    List<? extends Channel> channels) {
+                                    List<? extends Channel> channels,
+                                    Map<String, String> conf) throws RocksDBException, IOException {
+
         this.state = new State(instanceId,
-                new PersistentLog(),
+                new PersistentLog(conf.get("logDir"), conf.get("logMetadataDir")),
                 channels,
                 0,
                 null,
@@ -146,9 +150,13 @@ public class GravelDBConsensusService extends GravelDBConsensusServiceGrpc.Grave
         }
 
         final int majority = calculateMajority(peerMap.size() + 1);
-        AtomicInteger acceptCount = new AtomicInteger();
+        AtomicInteger acceptCount = new AtomicInteger(1);
         AtomicInteger rejectCount = new AtomicInteger();
         SettableFuture<Consensus> consensusFuture = SettableFuture.create();
+
+        if (acceptCount.incrementAndGet() >= majority) {
+            consensusFuture.set(Consensus.newBuilder().setAchieved(true).build());
+        }
 
         peerMap.forEach((instanceId, peer) -> {
 
@@ -160,6 +168,7 @@ public class GravelDBConsensusService extends GravelDBConsensusServiceGrpc.Grave
                             .addAllEntries(addEntriesInRange(state.getMatchIndex().get(instanceId) + 1, state.getCommitIndex().get()))
                             .addEntries(Entry.newBuilder().setTerm(state.getTerm().get()).setCommand(command))
                             .setPrevLogIndex(state.getMatchIndex().get(instanceId))
+                            .setLeaderCommit(state.getCommitIndex().get())
                             .build();
 
                     peer.appendEntries(request, unaryCallStreamObserver(appendEntriesResponse -> {
@@ -221,20 +230,38 @@ public class GravelDBConsensusService extends GravelDBConsensusServiceGrpc.Grave
     private Runnable heartBeatCallback() {
         return () -> {
             // send heartbeat messages to each peer
-            peerMap.forEach((instanceId, peer) -> peer.appendEntries(
-                    AppendEntriesRequest
-                            .newBuilder()
-                            .setTerm(state.getTerm().get())
-                            .setLeaderId(state.getInstanceId())
-                            .setPrevLogIndex(state.getCommitIndex().get())
-                            .setPrevLogTerm(state.getTerm().get())
-                            .build(),
-                    unaryCallStreamObserver(appendEntriesResponse -> {
-                        if (hasHigherTerm(appendEntriesResponse)) {
-                            stepDown();
-                        }
-                    })));
+            peerMap.forEach((instanceId, peer) -> {
+
+                int lastLogIndex = state.getMatchIndex().getOrDefault(instanceId, 0);
+
+                peer.appendEntries(
+                        AppendEntriesRequest
+                                .newBuilder()
+                                .setTerm(state.getTerm().get())
+                                .setLeaderId(state.getInstanceId())
+                                .setPrevLogIndex(lastLogIndex)
+                                .setPrevLogTerm(getPrevLogTerm(lastLogIndex))
+                                .addAllEntries(addEntriesInRange(lastLogIndex + 1, state.getNextIndex().get(instanceId)))
+                                .build(),
+                        unaryCallStreamObserver(appendEntriesResponse -> {
+                            if (hasHigherTerm(appendEntriesResponse)) {     // instance has higher term than leader
+                                stepDown();
+                            } else {        // lastLogEntry did not match
+                                state.getMatchIndex().put(instanceId, state.getMatchIndex().get(instanceId) - 1);
+                            }
+                        }));
+            });
         };
+    }
+
+    private int getPrevLogTerm(Integer lastLogIndex) {
+        if (lastLogIndex == 0) {
+            return 0;
+        } else if (lastLogIndex == state.getLog().getLastLogIndex()) {
+            return state.getLog().getLastLogTerm();
+        } else {
+            return state.getLog().getEntry(lastLogIndex).getTerm();
+        }
     }
 
     @SuppressWarnings("all")
@@ -260,6 +287,16 @@ public class GravelDBConsensusService extends GravelDBConsensusServiceGrpc.Grave
         AtomicInteger numVotes = new AtomicInteger(1);      // self vote
         int majority = GravelDBServerUtil.calculateMajority(peerMap.size() + 1);        // simple majority
 
+        if (numVotes.get() >= majority) {
+            logger.info(String.format("Elected as leader after getting votes from %d nodes " +
+                    "in the cluster", numVotes.get()));
+
+            state.setServerState(ServerState.LEADER);
+            state.setLeaderId(state.getInstanceId());
+            electionTimer.cancel();
+            heartBeatTimer.start();
+        }
+
         peerMap.forEach((instanceId, peer) -> {
             VoteRequest voteRequest = VoteRequest.newBuilder()
                     .setTerm(state.getTerm().get())
@@ -283,6 +320,7 @@ public class GravelDBConsensusService extends GravelDBConsensusServiceGrpc.Grave
                             "in the cluster", numVotes.get()));
 
                     state.setServerState(ServerState.LEADER);
+                    state.setLeaderId(state.getInstanceId());
                     electionTimer.cancel();
                     heartBeatTimer.start();
 
@@ -343,12 +381,9 @@ public class GravelDBConsensusService extends GravelDBConsensusServiceGrpc.Grave
         private final AtomicInteger commitIndex;
         private String votedFor;
         private int lastApplied;
-
         private String leaderId;
-
         private final Map<String, Integer> nextIndex;
         private final Map<String, Integer> matchIndex;
-
         private GravelDBConsensusService.ServerState serverState;
 
         public State(String instanceId,

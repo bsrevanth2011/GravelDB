@@ -10,7 +10,6 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.lang.reflect.ParameterizedType;
 import java.nio.file.Files;
 
 
@@ -26,31 +25,33 @@ public class RocksDBStore<K extends com.google.protobuf.GeneratedMessageV3,
         RocksDB.loadLibrary();
     }
 
-    @SuppressWarnings("unchecked")
-    public RocksDBStore(String path) {
+    public RocksDBStore(String path, Class<V> vClass) throws RocksDBException, IOException {
         this.path = path;
-        this.vClass = (Class<V>) ((ParameterizedType) getClass()
-                .getGenericSuperclass())
-                .getActualTypeArguments()[1];
+        this.vClass = vClass;
+        init();
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                db.close();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }));
     }
 
-    private void init() {
+    private void init() throws IOException, RocksDBException {
         Options options = new Options();
         options.setCreateIfMissing(true);
 
         File baseDir = new File(path);
-        try {
-            Files.createDirectories(baseDir.getParentFile().toPath());
-            Files.createDirectories(baseDir.getAbsoluteFile().toPath());
-            db = RocksDB.open(options, baseDir.getAbsolutePath());
-            logger.info("RocksDB initialized");
-        } catch (IOException | RocksDBException e) {
-            logger.error("Error initializing RocksDB. Exception: ", e);
-        }
+        
+        Files.createDirectories(baseDir.getParentFile().toPath());
+        Files.createDirectories(baseDir.getAbsoluteFile().toPath());
+        db = RocksDB.open(options, baseDir.getAbsolutePath());
+        logger.info("RocksDB initialized");
     }
 
     @Override
-    public V get(K key) throws Exception {
+    public V get(K key) throws RocksDBException {
         return deserializeValue(db.get(serializeKey(key)));
     }
 
