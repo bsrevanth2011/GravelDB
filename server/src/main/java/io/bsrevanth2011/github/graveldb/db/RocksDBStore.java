@@ -43,16 +43,17 @@ public class RocksDBStore<K extends com.google.protobuf.GeneratedMessageV3,
         options.setCreateIfMissing(true);
 
         File baseDir = new File(path);
-        
-        Files.createDirectories(baseDir.getParentFile().toPath());
-        Files.createDirectories(baseDir.getAbsoluteFile().toPath());
+
+        if (!baseDir.exists()) {
+            Files.createDirectories(baseDir.getParentFile().toPath());
+            Files.createDirectories(baseDir.getAbsoluteFile().toPath());
+        }
         db = RocksDB.open(options, baseDir.getAbsolutePath());
         logger.info("RocksDB initialized");
     }
 
     @Override
-    public V get(K key) {
-        try {
+    public V get(K key) {        try {
             return deserializeValue(db.get(serializeKey(key)));
         } catch (RocksDBException e) {
             throw new RuntimeException(e);

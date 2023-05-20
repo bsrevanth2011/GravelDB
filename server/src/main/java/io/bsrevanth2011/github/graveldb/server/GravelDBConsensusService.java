@@ -1,7 +1,6 @@
 package io.bsrevanth2011.github.graveldb.server;
 
 import com.google.common.util.concurrent.SettableFuture;
-import com.google.protobuf.Message;
 import io.bsrevanth2011.github.graveldb.*;
 import io.bsrevanth2011.github.graveldb.db.RocksDBStore;
 import io.bsrevanth2011.github.graveldb.log.Log;
@@ -15,7 +14,6 @@ import org.eclipse.collections.api.factory.Maps;
 import org.rocksdb.RocksDBException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;

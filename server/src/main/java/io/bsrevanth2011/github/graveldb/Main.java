@@ -32,8 +32,10 @@ public class Main {
                 .map(t -> ManagedChannelBuilder.forTarget(t).usePlaintext().build()).toList();
 
         Map<String, String> dbConf = Map.of(
-                "dataDir", "/Users/revanth/rocksdb/data" + instanceId,
-                "logDir", "/Users/revanth/rocksdb/log" + instanceId);
+                "dataDir", "/Users/revanth/rocksdb/data/" + instanceId + "/dataDir",
+                "logDir", "/Users/revanth/rocksdb/" + instanceId + "/log",
+                "logMetadataDir", "/Users/revanth/rocksdb/" + instanceId + "/logMetadata");
+
         GravelDBServer gravelDBServer = new GravelDBServer(instanceId, port, channels, dbConf);
         gravelDBServer.init();
     }
