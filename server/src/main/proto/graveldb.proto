@@ -13,6 +13,9 @@ service GravelDBConsensusService {
   rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse) {}
   rpc GetMaster(Empty) returns (Info) {}
   rpc GetConsensus(Command) returns (Consensus) {}
+  rpc Get(Key) returns (Value) {}
+  rpc Put(KeyValuePair) returns (Empty) {}
+  rpc Delete(Key) returns (Empty) {}
 }
 
 message Info {
@@ -48,13 +51,6 @@ message AppendEntriesRequest {
 message AppendEntriesResponse {
   uint32 term = 1;    // currentTerm, for leader to update itself
   bool success  = 2;    // true if follower contained entry matching prevLogIndex and prevLogTerm
-}
-
-// key value store protocol buffers
-service KVStore {
-  rpc Get(Key) returns (Value) {}
-  rpc Put(KeyValuePair) returns (Empty) {}
-  rpc Delete(Key) returns (Empty) {}
 }
 
 message Key {

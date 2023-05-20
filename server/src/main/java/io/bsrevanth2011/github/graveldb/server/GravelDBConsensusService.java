@@ -3,6 +3,7 @@ package io.bsrevanth2011.github.graveldb.server;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.Message;
 import io.bsrevanth2011.github.graveldb.*;
+import io.bsrevanth2011.github.graveldb.db.RocksDBStore;
 import io.bsrevanth2011.github.graveldb.log.Log;
 import io.bsrevanth2011.github.graveldb.log.PersistentLog;
 import io.bsrevanth2011.github.graveldb.util.ElectionTimer;
@@ -32,6 +33,8 @@ public class GravelDBConsensusService extends GravelDBConsensusServiceGrpc.Grave
     private final HeartBeatTimer heartBeatTimer = new HeartBeatTimer(heartBeatCallback());
     private final State state;
 
+    private final StateMachine         stateMachine;
+
     public GravelDBConsensusService(String instanceId,
                                     List<? extends Channel> channels,
                                     Map<String, String> conf) throws RocksDBException, IOException {
@@ -44,6 +47,7 @@ public class GravelDBConsensusService extends GravelDBConsensusServiceGrpc.Grave
                 0,
                 0,
                 GravelDBConsensusService.ServerState.FOLLOWER);
+        this.stateMachine = new StateMachine(new RocksDBStore<>(conf.get("dataDir"), Value.class));
         init();
     }
 
@@ -219,6 +223,58 @@ public class GravelDBConsensusService extends GravelDBConsensusServiceGrpc.Grave
         }
 
         return entries;
+    }
+
+    @Override
+    public void get(Key key, StreamObserver<Value> streamObserver) {
+        if (state.getLeaderId() == null) {
+            completeObserverExceptionally(streamObserver, new IllegalStateException("Leader Id not set yet"));
+            return;
+        }
+
+        if (!state.getInstanceId().equals(state.getLeaderId())) {
+            completeObserver(streamObserver, stateMachine.get(key));
+        }
+
+        getMaster(Empty.getDefaultInstance(),
+                unaryCallStreamObserver(info -> peerMap
+                        .get(info.getInstanceId())
+                        .get(key, unaryCallStreamObserver(value -> completeObserver(streamObserver, value)))));
+    }
+
+    @Override
+    public void put(KeyValuePair keyValuePair, StreamObserver<Empty> streamObserver) {
+        if (state.getLeaderId() == null) {
+            completeObserverExceptionally(streamObserver, new IllegalStateException("Leader Id not set yet"));
+            return;
+        }
+
+        if (!state.getInstanceId().equals(state.getLeaderId())) {
+            stateMachine.put(keyValuePair.getKey(), keyValuePair.getValue());
+            completeObserver(streamObserver, Empty.getDefaultInstance());        }
+
+        getMaster(Empty.getDefaultInstance(),
+                unaryCallStreamObserver(info -> peerMap
+                        .get(info.getInstanceId())
+                        .put(keyValuePair, unaryCallStreamObserver(empty -> completeObserver(streamObserver, empty)))));
+    }
+
+    @Override
+    public void delete(Key key, StreamObserver<Empty> streamObserver) {
+        if (state.getLeaderId() == null) {
+            completeObserverExceptionally(streamObserver, new IllegalStateException("Leader Id not set yet"));
+            return;
+        }
+
+        if (!state.getInstanceId().equals(state.getLeaderId())) {
+            stateMachine.delete(key);
+            completeObserver(streamObserver, Empty.getDefaultInstance());
+        }
+
+        getMaster(Empty.getDefaultInstance(),
+                unaryCallStreamObserver(info -> peerMap
+                        .get(info.getInstanceId())
+                        .delete(key, unaryCallStreamObserver(empty -> completeObserver(streamObserver, empty)))));
     }
 
     private boolean isMoreUpToDate(AppendEntriesRequest appendEntriesRequest) {

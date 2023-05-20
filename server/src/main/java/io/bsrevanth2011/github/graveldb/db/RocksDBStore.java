@@ -51,18 +51,30 @@ public class RocksDBStore<K extends com.google.protobuf.GeneratedMessageV3,
     }
 
     @Override
-    public V get(K key) throws RocksDBException {
-        return deserializeValue(db.get(serializeKey(key)));
+    public V get(K key) {
+        try {
+            return deserializeValue(db.get(serializeKey(key)));
+        } catch (RocksDBException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
-    public void delete(K key) throws RocksDBException {
-        db.delete(serializeKey(key));
+    public void delete(K key) {
+        try {
+            db.delete(serializeKey(key));
+        } catch (RocksDBException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
-    public void put(K key, V value) throws RocksDBException {
-        db.put(serializeKey(key), serializeValue(value));
+    public void put(K key, V value) {
+        try {
+            db.put(serializeKey(key), serializeValue(value));
+        } catch (RocksDBException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private byte[] serializeKey(K key) {

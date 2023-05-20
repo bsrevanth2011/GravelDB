@@ -52,6 +52,13 @@ public class PersistentLog implements Log {
 
     @Override
     public void deleteLastEntry() {
+        try {
+            log.delete(Index.newBuilder().setIndex(logMetadata.getLastLogIndex()).build());
+            logMetadata.setLastLogIndex(logMetadata.getLastLogIndex() - 1);
+            logMetadata.setLastLogTerm(getEntry(logMetadata.getLastLogIndex()).getTerm());
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
 
     }
 

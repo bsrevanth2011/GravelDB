@@ -1,8 +1,6 @@
 package io.bsrevanth2011.github.graveldb.server;
 
-import io.bsrevanth2011.github.graveldb.Command;
 import io.bsrevanth2011.github.graveldb.Key;
-import io.bsrevanth2011.github.graveldb.KeyValuePair;
 import io.bsrevanth2011.github.graveldb.Value;
 import io.bsrevanth2011.github.graveldb.db.KVStore;
 
@@ -14,15 +12,16 @@ public class StateMachine {
         this.db = db;
     }
 
-    public void commit(Command command) throws Exception {
-        switch (command.getOp()) {
-            case GET -> db.get(command.getData().getKey());
-            case DELETE -> db.delete(command.getData().getKey());
-            case PUT -> {
-                KeyValuePair pair = command.getData().getKeyValuePair();
-                db.put(pair.getKey(), pair.getValue());
-            }
-        }
+    public Value get(Key key) {
+        return db.get(key);
+    }
+
+    public void put(Key key, Value value) {
+        db.put(key, value);
+    }
+
+    public void delete(Key key) {
+        db.delete(key);
     }
 
 }
