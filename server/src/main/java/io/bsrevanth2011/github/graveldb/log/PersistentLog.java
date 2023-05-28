@@ -1,127 +1,83 @@
 package io.bsrevanth2011.github.graveldb.log;
 
+import com.google.protobuf.InvalidProtocolBufferException;
 import io.bsrevanth2011.github.graveldb.Entry;
-import io.bsrevanth2011.github.graveldb.Index;
-import io.bsrevanth2011.github.graveldb.db.KVStore;
-import io.bsrevanth2011.github.graveldb.db.RocksDBStore;
+import io.bsrevanth2011.github.graveldb.db.RocksDBService;
 import org.rocksdb.RocksDBException;
 
-import java.io.*;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.List;
 
 public class PersistentLog implements Log {
 
-    private final KVStore<Index, Entry> log;
-    private final LogMetadata logMetadata;
-    public PersistentLog(String logDir, String logMetadataDir) throws RocksDBException, IOException {
-        this.log = new RocksDBStore<>(logDir, Entry.class);
-        this.logMetadata = new LogMetadata();
-        persistLogMetadataToDiskShutdownHook(logMetadataDir);
-    }
+    private static final byte[] LAST_LOG_INDEX_KEY = "lastLogIndex".getBytes(Charset.defaultCharset());
+    private static final byte[] LAST_LOG_TERM_KEY = "lastLogTerm".getBytes(Charset.defaultCharset());
 
-    private void persistLogMetadataToDiskShutdownHook(String logMetadataDir) {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try (FileOutputStream fs = new FileOutputStream(logMetadataDir);
-                 ObjectOutputStream os = new ObjectOutputStream(fs)) {
-                os.writeObject(logMetadata);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }));
+    private final RocksDBService log;
+    private final RocksDBService logMetadata;
+    private int lastLogIndex;
+    private int lastLogTerm;
+
+    public PersistentLog(String logDir, String logMetadataDir) throws RocksDBException, IOException {
+        this.log = new RocksDBService(logDir);
+        this.logMetadata = new RocksDBService(logMetadataDir);
     }
 
     @Override
     public void appendEntry(int index, Entry entry) {
-        try {
-            log.put(Index.newBuilder().setIndex(index).build(), entry);
-            logMetadata.setLastLogIndex(index);
-            logMetadata.setLastLogTerm(entry.getTerm());
-        } catch (Exception e) {
-            throw new RuntimeException(e);      // TODO: handle exception in a better manner
-        }
-    }
-
-    @Override
-    public int getLastLogTerm() {
-        return logMetadata.getLastLogTerm();
-    }
-
-    @Override
-    public int getLastLogIndex() {
-        return logMetadata.getLastLogIndex();
-    }
-
-    @Override
-    public void deleteLastEntry() {
-        try {
-            log.delete(Index.newBuilder().setIndex(logMetadata.getLastLogIndex()).build());
-            logMetadata.setLastLogIndex(logMetadata.getLastLogIndex() - 1);
-            logMetadata.setLastLogTerm(getEntry(logMetadata.getLastLogIndex()).getTerm());
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-
+        log.put(intToBytes(index), entry.toByteArray());
+        updateLogMetadata(index, entry.getTerm());
     }
 
     @Override
     public Entry getEntry(int index) {
+        if (index == 0) return null;
         try {
-            return log.get(Index.newBuilder().setIndex(index).build());
-        } catch (Exception e) {
-            throw new RuntimeException(e);      // TODO: handle exception in a better manner
-        }
-    }
-
-    @Override
-    public Entry getLastEntry() {
-        try {
-            return log.get(Index.newBuilder().setIndex(logMetadata.getLastLogIndex()).build());
-        } catch (Exception e) {
+            return Entry.parseFrom(log.get(intToBytes(index)));
+        } catch (InvalidProtocolBufferException e) {
             throw new RuntimeException(e);
         }
     }
 
-    @Override
-    public int getLastApplied() {
-        return logMetadata.getLastApplied();
+    private static byte[] intToBytes(int index) {
+        return ByteBuffer.allocate(4).putInt(index).array();
     }
 
-    private static class LogMetadata implements Serializable {
-        @Serial
-        private static final long serialVersionUID = 18293719811127L;
-
-        private int lastLogTerm;
-        private int lastLogIndex;
-
-        private int lastApplied;
-
-        private LogMetadata() {
-            this.lastLogTerm = 0;
-            this.lastLogIndex = 0;
-            this.lastApplied = 0;
+    @Override
+    public Iterable<Entry> getEntriesInRange(int beginIndex, int endIndex) {
+        List<Entry> entries = new ArrayList<>(endIndex - beginIndex + 1);
+        for (int idx = beginIndex; idx <= endIndex; idx++) {
+            entries.add(getEntry(idx));
         }
 
-        public void setLastLogTerm(int lastLogTerm) {
-            this.lastLogTerm = lastLogTerm;
-        }
+        return entries;
+    }
 
-        public void setLastLogIndex(int lastLogIndex) {
-            this.lastLogIndex = lastLogIndex;
-        }
+    @Override
+    public void deleteEntry(int index) {
+        int lastLogIndex = index - 1;
+        int lastLogTerm = lastLogIndex > 0 ? getEntry(lastLogIndex).getTerm() : 0;
+        log.delete(intToBytes(index));
+        updateLogMetadata(lastLogIndex, lastLogTerm);
+    }
 
-        public int getLastLogTerm() {
-            return lastLogTerm;
-        }
+    @Override
+    public int getLastLogIndex() {
+        return lastLogIndex;
+    }
 
-        public int getLastLogIndex() {
-            return lastLogIndex;
-        }
+    @Override
+    public int getLastLogTerm() {
+        return lastLogTerm;
+    }
 
-        public int getLastApplied() {
-            return lastApplied;
-        }
-
-        public void setLastApplied(int lastApplied) {
-            this.lastApplied = lastApplied;
-        }
+    private void updateLogMetadata(int index, int term) {
+        this.lastLogIndex = index;
+        this.lastLogTerm = term;
+        logMetadata.put(LAST_LOG_INDEX_KEY, intToBytes(index));
+        logMetadata.put(LAST_LOG_TERM_KEY, intToBytes(term));
     }
 }

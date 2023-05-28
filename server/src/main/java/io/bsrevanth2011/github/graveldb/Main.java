@@ -1,49 +1,39 @@
 package io.bsrevanth2011.github.graveldb;
 
 import io.bsrevanth2011.github.graveldb.server.GravelDBServer;
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
-import org.rocksdb.RocksDBException;
+import io.bsrevanth2011.github.graveldb.server.ServerStubConfig;
+import org.apache.commons.configuration2.HierarchicalConfiguration;
+import org.apache.commons.configuration2.YAMLConfiguration;
+import org.apache.commons.configuration2.tree.ImmutableNode;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.ServerSocket;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
-import java.util.stream.Stream;
 
 public class Main {
-    public static void main(String[] args) throws IOException, RocksDBException {
+    public static void main(String[] args) throws Exception {
 
-        Properties properties = new Properties();
+        int instanceId = Integer.parseInt(args[0]);
+        int port = Integer.parseInt(args[1]);
+        YAMLConfiguration config = new YAMLConfiguration();
+        config.read(new InputStreamReader(Main.class.getClassLoader().getResourceAsStream("application.yml")));
+        List<HierarchicalConfiguration<ImmutableNode>> peerConfigs = config.configurationsAt("server.stubs");
 
-        try (InputStream is = Main.class.getClassLoader().getResourceAsStream(args[0].split("=")[1])) {
-            if (is != null) {
-                properties.load(is);
-            }
+        List<ServerStubConfig> stubs = new ArrayList<>();
+        for (var peerConfig : peerConfigs) {
+            int id = peerConfig.getInt("instanceId");
+            String target = peerConfig.getString("target");
+            if (id == instanceId) continue;
+            stubs.add(new ServerStubConfig(id, target));
         }
-
-        String instanceId = properties.getProperty("server.name");
-        int port = Integer.parseInt(properties.getProperty("server.port", findRandomOpenPortOnAllLocalInterfaces()));
-
-        String[] targets = properties.getProperty("targets").split(",");
-        List<ManagedChannel> channels = Stream.of(targets)
-                .map(t -> ManagedChannelBuilder.forTarget(t).usePlaintext().build()).toList();
 
         Map<String, String> dbConf = Map.of(
                 "dataDir", "/Users/revanth/rocksdb/data/" + instanceId + "/dataDir",
                 "logDir", "/Users/revanth/rocksdb/" + instanceId + "/log",
                 "logMetadataDir", "/Users/revanth/rocksdb/" + instanceId + "/logMetadata");
 
-        GravelDBServer gravelDBServer = new GravelDBServer(instanceId, port, channels, dbConf);
+        GravelDBServer gravelDBServer = new GravelDBServer(instanceId, port, dbConf, stubs.toArray(new ServerStubConfig[0]));
         gravelDBServer.init();
     }
-
-    private static String findRandomOpenPortOnAllLocalInterfaces() throws IOException {
-        try (ServerSocket socket = new ServerSocket(0)) {
-            return Integer.toString(socket.getLocalPort());
-        }
-    }
-
 }

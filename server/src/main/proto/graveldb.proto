@@ -7,15 +7,16 @@ option java_outer_classname = "GravelDBProto";
 package graveldb;
 
 // consensus service protocol buffers
-service GravelDBConsensusService {
+service ConsensusServer {
   rpc RequestInstanceId(Info) returns (Info) {}
   rpc RequestVote(VoteRequest) returns (VoteResponse) {}
   rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse) {}
-  rpc GetMaster(Empty) returns (Info) {}
-  rpc GetConsensus(Command) returns (Consensus) {}
-  rpc Get(Key) returns (Value) {}
-  rpc Put(KeyValuePair) returns (Empty) {}
-  rpc Delete(Key) returns (Empty) {}
+}
+
+service DatabaseService {
+  rpc Get(Key) returns (Result) {}
+  rpc Put(KeyValuePair) returns (Result) {}
+  rpc Delete(Key) returns (Result) {}
 }
 
 message Info {
@@ -29,7 +30,7 @@ message Consensus {
 
 message VoteRequest {
   uint32 term = 1;    // candidate's term
-  string candidateId = 2;   // candidate requesting vote
+  uint32 candidateId = 2;   // candidate requesting vote
   uint32 lastLogTerm = 3;   // term of candidate's last log entry
   uint32 lastLogIndex = 4;    // index of candidate's last log entry
 }
@@ -41,7 +42,7 @@ message VoteResponse {
 
 message AppendEntriesRequest {
   uint32 term = 1;    // leader’s term
-  string leaderId = 2;    // so follower can redirect clients
+  uint32 leaderId = 2;    // so follower can redirect clients
   uint32 prevLogIndex  = 3;   // index of log entry immediately preceding new ones
   uint32 prevLogTerm = 4;   // term of prevLogIndex entry
   repeated Entry entries = 5;    // log entries to store (empty for heartbeat; may send more than one for efficiency)
@@ -54,11 +55,16 @@ message AppendEntriesResponse {
 }
 
 message Key {
-  string key = 1;
+  bytes key = 1;
+}
+
+message Result {
+  bool status = 1;
+  optional Value value = 2;
 }
 
 message Value {
-  string value = 1;
+  bytes value = 1;
 }
 
 message KeyValuePair {
@@ -75,13 +81,13 @@ message Entry {
 
 message Command {
   enum Op {
-    NOP = 0;
+    NOOP = 0;
     GET = 1;
     PUT = 2;
     DELETE = 3;
   }
   Op op = 1;
-  Data data = 2;
+  optional Data data = 2;
 }
 
 message Data {

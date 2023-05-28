@@ -1,7 +1,6 @@
 package io.bsrevanth2011.github.graveldb.server;
 
 import io.bsrevanth2011.github.graveldb.util.ContextAwareThreadPoolExecutor;
-import io.grpc.Channel;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import org.rocksdb.RocksDBException;
@@ -9,33 +8,32 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 
 public class GravelDBServer {
 
-    private static final Logger logger = LoggerFactory.getLogger(GravelDBConsensusService.class.getName());
+    private static final Logger logger = LoggerFactory.getLogger(GravelDBServer.class);
 
     private final Server server;
     /**
      * Create a GravelDB server using serverBuilder as a base and features as data.
      */
-    public GravelDBServer(String instanceId, int port, List<? extends Channel> channels, Map<String, String> dbConf) throws RocksDBException, IOException {
+    public GravelDBServer(int instanceId, int port, Map<String, String> dbConf, ServerStubConfig[] stubConfigs) throws RocksDBException, IOException {
 
-        logger.info("Instantiated server with instance id := " + instanceId);
-
-        int threadPoolSize = channels.size();
+        RaftServer server = new RaftServer(instanceId, 0, 0, dbConf, stubConfigs);
+        DBClient client = new DBClient(server);
 
         this.server = ServerBuilder
                 .forPort(port)
                 .executor(ContextAwareThreadPoolExecutor
-                        .newWithContext(threadPoolSize, threadPoolSize, Integer.MAX_VALUE, TimeUnit.MILLISECONDS))
-                .addService(new GravelDBConsensusService(instanceId, channels, dbConf))
+                        .newWithContext(5, 5, Integer.MAX_VALUE, TimeUnit.MILLISECONDS))
+                .addService(server)
+                .addService(client)
                 .build();
 
-        logger.info("Started server on port := " + port);
+        logger.info("Starting server on port := " + port);
     }
 
     public void init() throws IOException {
