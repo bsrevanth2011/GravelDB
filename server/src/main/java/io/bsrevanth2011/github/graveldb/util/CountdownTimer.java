@@ -24,7 +24,7 @@ public final class CountdownTimer {
     public void schedule(Runnable handler, long fixedRate) {
         stopIfStarted();
         scheduledFuture = getScheduledThreadPoolExecutor()
-                .scheduleAtFixedRate(handler, 0, fixedRate, TimeUnit.MILLISECONDS);
+                .scheduleWithFixedDelay(handler, 0, fixedRate, TimeUnit.MILLISECONDS);
         logger.debug("Started scheduled timer with a " +
                 "trigger set to go off every {} milliseconds", fixedRate);
     }

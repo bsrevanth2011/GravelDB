@@ -1,32 +1,29 @@
 package io.bsrevanth2011.github.graveldb.server;
 
-import com.google.protobuf.InvalidProtocolBufferException;
 import io.bsrevanth2011.github.graveldb.Key;
 import io.bsrevanth2011.github.graveldb.Value;
+import io.bsrevanth2011.github.graveldb.db.DB;
 import io.bsrevanth2011.github.graveldb.db.RocksDBService;
+import org.rocksdb.RocksDBException;
 
 public class StateMachine {
 
-    private final RocksDBService db;
+    private final DB<Key, Value> db;
 
-    public StateMachine(RocksDBService db) {
-        this.db = db;
+    public StateMachine() throws RocksDBException {
+        this.db = RocksDBService.getOrCreate("data", Key.class, Value.class);
     }
 
     public Value get(Key key) {
-        try {
-            return Value.parseFrom(db.get(key.toByteArray()));
-        } catch (InvalidProtocolBufferException e) {
-            throw new RuntimeException(e);
-        }
+        return db.get(key);
     }
 
     public void put(Key key, Value value) {
-        db.put(key.getKey().toByteArray(), value.getValue().toByteArray());
+        db.put(key, value);
     }
 
     public void delete(Key key) {
-        db.delete(key.getKey().toByteArray());
+        db.delete(key);
     }
 
 }

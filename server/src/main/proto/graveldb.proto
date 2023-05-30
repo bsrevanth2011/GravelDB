@@ -92,7 +92,7 @@ message Command {
 
 message Data {
   optional Key key = 1;
-  optional KeyValuePair keyValuePair = 2;
+  optional Value value = 2;
 }
 
 message Index {

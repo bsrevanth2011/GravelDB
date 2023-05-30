@@ -1,11 +1,10 @@
 package io.bsrevanth2011.github.graveldb.db;
 
-public interface DB<K, V, R> {
-    R get(K key) throws Exception;
+public interface DB<K, V> {
+    
+    V get(K key);
 
-    R put(K key, V value) throws Exception;
+    void put(K key, V value);
 
-    R delete(K key) throws Exception;
-
-    boolean isMaster();
+    void delete(K key);
 }

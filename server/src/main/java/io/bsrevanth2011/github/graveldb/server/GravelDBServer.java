@@ -8,27 +8,27 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 
 public class GravelDBServer {
 
     private static final Logger logger = LoggerFactory.getLogger(GravelDBServer.class);
+    private static final int THREADPOOL_SIZE = 100;
 
     private final Server server;
     /**
      * Create a GravelDB server using serverBuilder as a base and features as data.
      */
-    public GravelDBServer(int instanceId, int port, Map<String, String> dbConf, ServerStubConfig[] stubConfigs) throws RocksDBException, IOException {
+    public GravelDBServer(int instanceId, int port, ServerStubConfig[] stubConfigs) throws RocksDBException, IOException {
 
-        RaftServer server = new RaftServer(instanceId, 0, 0, dbConf, stubConfigs);
+        RaftServer server = new RaftServer(instanceId, 0, 0, stubConfigs);
         DBClient client = new DBClient(server);
 
         this.server = ServerBuilder
                 .forPort(port)
                 .executor(ContextAwareThreadPoolExecutor
-                        .newWithContext(5, 5, Integer.MAX_VALUE, TimeUnit.MILLISECONDS))
+                        .newWithContext(THREADPOOL_SIZE, THREADPOOL_SIZE, Integer.MAX_VALUE, TimeUnit.MILLISECONDS))
                 .addService(server)
                 .addService(client)
                 .build();

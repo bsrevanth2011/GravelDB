@@ -2,44 +2,43 @@ package io.bsrevanth2011.github.graveldb.server;
 
 import io.bsrevanth2011.github.graveldb.*;
 import io.bsrevanth2011.github.graveldb.db.DB;
+import io.bsrevanth2011.github.graveldb.util.ContextAwareThreadPoolExecutor;
 import io.grpc.stub.StreamObserver;
 
-import java.rmi.ServerException;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class DBClient extends DatabaseServiceGrpc.DatabaseServiceImplBase {
 
-    private final DB<Key, Value, Result> db;
+    private static final int THREADPOOL_SIZE = 100;
 
-    public DBClient(DB<Key, Value, Result> db) {
+    private final DB<Key, Value> db;
+    private final ExecutorService executor = ContextAwareThreadPoolExecutor
+            .newWithContext(THREADPOOL_SIZE, THREADPOOL_SIZE, Integer.MAX_VALUE, TimeUnit.MILLISECONDS);
+
+    public DBClient(DB<Key, Value> db) {
         this.db = db;
     }
 
     @Override
     public void get(Key key, StreamObserver<Result> responseObserver) {
-        if (!db.isMaster()) {
-            completeExceptionally(responseObserver);
-            return;
-        }
-
         try {
-            Result result = db.get(key);
-            responseObserver.onNext(result);
+            Value value = db.get(key);
+            responseObserver.onNext(Result.newBuilder().setValue(value).setStatus(true).build());
             responseObserver.onCompleted();
         } catch (Exception e) {
             responseObserver.onError(e);
+            responseObserver.onCompleted();
         }
     }
 
     @Override
     public void put(KeyValuePair keyValuePair, StreamObserver<Result> responseObserver) {
-        if (!db.isMaster()) {
-            completeExceptionally(responseObserver);
-            return;
-        }
-
         try {
-            Result result = db.put(keyValuePair.getKey(), keyValuePair.getValue());
-            responseObserver.onNext(result);
+            db.put(keyValuePair.getKey(), keyValuePair.getValue());
+            responseObserver.onNext(Result.newBuilder().setStatus(true).build());
             responseObserver.onCompleted();
         } catch (Exception e) {
             responseObserver.onError(e);
@@ -48,23 +47,13 @@ public class DBClient extends DatabaseServiceGrpc.DatabaseServiceImplBase {
 
     @Override
     public void delete(Key key, StreamObserver<Result> responseObserver) {
-        if (!db.isMaster()) {
-            completeExceptionally(responseObserver);
-            return;
-        }
-
         try {
-            Result result = db.delete(key);
-            responseObserver.onNext(result);
+            db.delete(key);
+            responseObserver.onNext(Result.newBuilder().setStatus(true).build());
             responseObserver.onCompleted();
         } catch (Exception e) {
             responseObserver.onError(e);
         }
-    }
-
-    private void completeExceptionally(StreamObserver<?> responseObserver) {
-        responseObserver.onError(new ServerException("Node is not master. " +
-                "Client is responsible for redirecting request to master node"));
     }
 
 }

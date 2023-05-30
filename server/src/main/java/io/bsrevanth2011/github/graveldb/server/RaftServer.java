@@ -1,10 +1,10 @@
 package io.bsrevanth2011.github.graveldb.server;
 
+import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.bsrevanth2011.github.graveldb.*;
 import io.bsrevanth2011.github.graveldb.db.DB;
-import io.bsrevanth2011.github.graveldb.db.RocksDBService;
 import io.bsrevanth2011.github.graveldb.log.Log;
 import io.bsrevanth2011.github.graveldb.log.PersistentLog;
 import io.bsrevanth2011.github.graveldb.util.CountdownTimer;
@@ -16,11 +16,10 @@ import org.rocksdb.RocksDBException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.util.Arrays;
-import java.util.Map;
 import java.util.Random;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -28,7 +27,7 @@ import static io.bsrevanth2011.github.graveldb.server.RaftServer.ServerState.FOL
 
 @Getter
 @Setter
-public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase implements DB<Key, Value, Result> {
+public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase implements DB<Key, Value> {
 
     private static final Logger logger = LoggerFactory.getLogger(RaftServer.class);
     private final ReentrantLock lock = new ReentrantLock();
@@ -49,44 +48,46 @@ public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase impl
     public RaftServer(int instanceId,
                       int currentTerm,
                       int votedFor,
-                      Map<String, String> dbConf,
-                      ServerStubConfig[] stubConfigs) throws RocksDBException, IOException {
-
-        String logDir = dbConf.get("logDir");
-        String logMetadataDir = dbConf.get("logMetadataDir");
-        String dataDir = dbConf.get("dataDir");
+                      ServerStubConfig[] stubConfigs) throws RocksDBException {
 
         this.instanceId = instanceId;
         this.currentTerm = currentTerm;
         this.votedFor = votedFor;
         this.serverState = FOLLOWER;
-        this.log = new PersistentLog(logDir, logMetadataDir);
-        this.stateMachine = new StateMachine(new RocksDBService(dataDir));
+        this.log = new PersistentLog();
+        this.stateMachine = new StateMachine();
         this.remoteServers = Arrays.stream(stubConfigs).map(ServerStub::new).toArray(ServerStub[]::new);
         restartElectionTimer();
     }
 
     @Override
-    public boolean isMaster() {
-        return getInstanceId() == getLeaderId();
-    }
-
-    @Override
     public void appendEntries(AppendEntriesRequest request, StreamObserver<AppendEntriesResponse> responseObserver) {
-        responseObserver.onNext(handleAppendEntries(request));
-        responseObserver.onCompleted();
+        try {
+            responseObserver.onNext(handleAppendEntries(request));
+        } catch (Exception e) {
+            responseObserver.onError(e);
+        } finally {
+            responseObserver.onCompleted();
+        }
     }
 
     @Override
     public void requestVote(VoteRequest request, StreamObserver<VoteResponse> responseObserver) {
-        responseObserver.onNext(handleRequestVote(request));
-        responseObserver.onCompleted();
+        try {
+            responseObserver.onNext(handleRequestVote(request));
+        } catch (Exception e) {
+            responseObserver.onError(e);
+        } finally {
+            responseObserver.onCompleted();
+        }
     }
 
     private AppendEntriesResponse handleAppendEntries(AppendEntriesRequest request) {
 
         try {
             lock.lock();
+
+            logger.info("Received AppendEntries request from server {}", request.getLeaderId());
             AppendEntriesResponse.Builder responseBuilder = AppendEntriesResponse.newBuilder();
 
             if (request.getTerm() < currentTerm) {
@@ -96,7 +97,7 @@ public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase impl
             }
 
             if (currentTerm < request.getTerm()) {
-                logger.info("Received AppendEntries request from server {} with term := {}, currentTerm := {}",
+                logger.info("Received AppendEntries request from server {} with higher term := {}, currentTerm := {}",
                         request.getLeaderId(), request.getTerm(), currentTerm);
                 responseBuilder.setTerm(request.getTerm());
             }
@@ -115,8 +116,9 @@ public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase impl
             }
 
             if (request.getPrevLogIndex() > log.getLastLogIndex()) {
-                logger.info("Rejecting AppendEntries request from server {}. Reason: Missing Entries",
-                        request.getLeaderId());
+                logger.info("Rejecting AppendEntries request from server {}. Reason: Missing Entries. Previous log index" +
+                                " in the request is {}, and last log index in the log is {}",
+                        request.getLeaderId(), request.getPrevLogIndex(), log.getLastLogIndex());
                 return responseBuilder.setSuccess(false).build();
             }
 
@@ -147,7 +149,9 @@ public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase impl
                         log.deleteEntry(delIndex);
                     }
                 }
+
                 log.appendEntry(index, entry);
+                logger.info("Added entry in the log for index {} and term {}", log.getLastLogIndex(), entry.getTerm());
             }
 
             if (request.getLeaderCommit() > getCommitIndex()) {
@@ -229,6 +233,8 @@ public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase impl
                 setCurrentTerm(getCurrentTerm() + 1);
                 setVotedFor(getInstanceId());
 
+                logger.info("Contesting for elections in term {}", getCurrentTerm());
+
                 if (getServerState() != ServerState.CANDIDATE) {
                     setServerState(RaftServer.ServerState.CANDIDATE);
                 }
@@ -301,8 +307,7 @@ public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase impl
                                     return;
                                 }
 
-                                logger.error("Error occurred during VoteRequest call to server {}",
-                                        stub.getInstanceId());
+                                logger.error("Error occurred during VoteRequest call to server {} := {}", stub.getInstanceId(), t.getMessage());
 
                                 if (getServerState() != RaftServer.ServerState.CANDIDATE) {
                                     return;
@@ -330,9 +335,21 @@ public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase impl
         }
     }
 
+    @SuppressWarnings("UnusedReturnValue")
     private void sendHeartBeat() {
         logger.info("Sending heartbeat to all servers to convey leader status");
-        replicateLog(Entry.newBuilder().setCommand(Command.newBuilder().setOp(Command.Op.NOOP).build()).build());
+        try {
+            replicateLog(Entry
+                    .newBuilder()
+                    .setTerm(getCurrentTerm())
+                    .setCommand(Command
+                            .newBuilder()
+                            .setOp(Command.Op.NOOP).build())
+                    .build())
+                    .get();
+        } catch (InterruptedException | ExecutionException e) {
+            logger.error("Error occurred := " + e);
+        }
     }
 
     private void becomeLeader() {
@@ -374,58 +391,54 @@ public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase impl
     }
 
     @Override
-    public Result get(Key key) throws Exception {
-        try {
-            lock.lock();
-            return Result.newBuilder().setStatus(true).setValue(stateMachine.get(key)).build();
-        } finally {
-            lock.unlock();
-        }
+    public Value get(Key key) {
+        return stateMachine.get(key);
     }
 
     @Override
-    public Result put(Key key, Value value) throws Exception {
+    public void put(Key key, Value value) {
+        Entry entry = createPutEntry(key, value);
         try {
-            lock.lock();
-            Entry entry = Entry.getDefaultInstance();
             boolean logReplicated = replicateLog(entry).get();
             if (logReplicated) {
                 stateMachine.put(key, value);
-                setCommitIndex(getCommitIndex() + 1);
-                return Result.newBuilder().setStatus(true).build();
+                incrementCommitIndex();
             } else {
-                return Result.newBuilder().setStatus(false).build();
+                throw new ReplicationFailureException();
             }
-        } finally {
-            lock.unlock();
+        } catch (ExecutionException | InterruptedException e) {
+            throw new RuntimeException(e);
         }
     }
 
     @Override
-    public Result delete(Key key) throws Exception {
+    public void delete(Key key) {
+        Entry entry = createDeleteEntry(key);
+
         try {
-            lock.lock();
-            Entry entry = Entry.getDefaultInstance();
             boolean logReplicated = replicateLog(entry).get();
             if (logReplicated) {
                 stateMachine.delete(key);
-                setCommitIndex(getCommitIndex() + 1);
-                return Result.newBuilder().setStatus(true).build();
+                incrementCommitIndex();
             } else {
-                return Result.newBuilder().setStatus(false).build();
+                throw new ReplicationFailureException();
             }
-        } finally {
-            lock.unlock();
+        } catch (ExecutionException | InterruptedException e) {
+            throw new RuntimeException(e);
         }
+    }
+
+    private void incrementCommitIndex() {
+        setCommitIndex(getCommitIndex() + 1);
     }
 
     @CanIgnoreReturnValue
     private Future<Boolean> replicateLog(Entry... entries) {
+
+        SettableFuture<Boolean> logReplicationFuture = SettableFuture.create();
+
         try {
             lock.lock();
-            if (getServerState() != ServerState.LEADER) {
-                return CompletableFuture.completedFuture(false);
-            }
 
             for (Entry entry : entries) {
                 log.appendEntry(log.getLastLogIndex() + 1, entry);
@@ -437,7 +450,7 @@ public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase impl
 
             AtomicInteger accepts = new AtomicInteger(1);
             AtomicInteger rejects = new AtomicInteger(0);
-            SettableFuture<Boolean> logReplicationFuture = SettableFuture.create();
+
             int majority = (remoteServers.length + 1) / 2 + 1;
 
             for (ServerStub stub : remoteServers) {
@@ -447,18 +460,26 @@ public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase impl
 
                 AppendEntriesRequest request = requestBuilder.setPrevLogIndex(prevLogIndex)
                         .setPrevLogTerm(prevLogTerm)
-                        .addAllEntries(log.getEntriesInRange(prevLogIndex + 1, getCommitIndex()))        // pending entries
+                        .addAllEntries(log.getEntriesInRange(prevLogIndex + 1, log.getLastLogIndex()))        // pending entries
                         .addAllEntries(Lists.mutable.of(entries))       // new entries
-                        .setTerm(currentTerm)
+                        .setTerm(getCurrentTerm())
                         .build();
 
                 logger.info("Sending AppendEntries request to server {} in term {}", stub.getInstanceId(), getCurrentTerm());
+
                 stub.appendEntries(request, new StreamObserver<>() {
                     @Override
                     public void onNext(AppendEntriesResponse response) {
 
                         try {
                             lock.lock();
+
+                            if (getServerState() != ServerState.LEADER) {
+                                logger.info("Received response from {} for AppendEntries call in term {}. " +
+                                                "But server not in leader state anymore, therefore ignoring response.",
+                                        stub.getInstanceId(), getCurrentTerm());
+                                return;
+                            }
 
                             if (response.getSuccess()) {
 
@@ -476,7 +497,7 @@ public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase impl
                                 }
                             } else {
 
-                                logger.info("Received acceptance for AppendEntries call from server {} in term {}. " +
+                                logger.info("Received rejection for AppendEntries call from server {} in term {}. " +
                                         "Decrementing the next index for the server by 1", stub.getInstanceId(), getCurrentTerm());
                                 rejects.getAndIncrement();
 
@@ -504,12 +525,12 @@ public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase impl
 
                     @Override
                     public void onError(Throwable t) {
-                        logger.error("Error occurred during AppendEntries call to server {}", stub.getInstanceId());
+                        logger.error("Error occurred during AppendEntries call to server" + stub.getInstanceId(), t);
 
                         try {
                             lock.lock();
                             if (rejects.incrementAndGet() >= majority) {
-                                logger.info("Received rejection for VoteRequest call from {} servers which is less than " +
+                                logger.info("Received rejection for AppendEntries call from {} servers which is less than " +
                                         "the minimum required value of {} out of {}", rejects.get(), majority, remoteServers.length + 1);
                                 stepDown(getCurrentTerm());
                                 logReplicationFuture.set(false);
@@ -526,15 +547,44 @@ public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase impl
             }
 
             return logReplicationFuture;
-
+        } catch (Exception e) {
+            logger.error("Exception occurred := " + e.getMessage());
+            return Futures.immediateFailedFuture(e);
         } finally {
             lock.unlock();
         }
     }
 
+    private Entry createDeleteEntry(Key key) {
+        return Entry.newBuilder()
+                .setTerm(getCurrentTerm())
+                .setCommand(Command
+                        .newBuilder()
+                        .setOp(Command.Op.DELETE)
+                        .setData(Data
+                                .newBuilder()
+                                .setKey(key)
+                                .build()))
+                .build();
+    }
+
+    private Entry createPutEntry(Key key, Value value) {
+        return Entry.newBuilder()
+                .setTerm(getCurrentTerm())
+                .setCommand(Command
+                        .newBuilder()
+                        .setOp(Command.Op.PUT)
+                        .setData(Data
+                                .newBuilder()
+                                .setKey(key)
+                                .setValue(value)
+                                .build()))
+                .build();
+    }
+
     enum ServerState {
         FOLLOWER,
         CANDIDATE,
-        LEADER
+        LEADER;
     }
 }
