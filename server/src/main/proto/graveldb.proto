@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "io.bsrevanth2011.github.graveldb";
+option java_outer_classname = "GravelDBProto";
+
+package graveldb;
+
+// consensus service protocol buffers
+service ConsensusServer {
+  rpc RequestInstanceId(Info) returns (Info) {}
+  rpc RequestVote(VoteRequest) returns (VoteResponse) {}
+  rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse) {}
+}
+
+service DatabaseService {
+  rpc Get(Key) returns (Result) {}
+  rpc Put(KeyValuePair) returns (Result) {}
+  rpc Delete(Key) returns (Result) {}
+}
+
+message Info {
+  string instanceId = 1;
+  optional bool isLeader = 2;
+}
+
+message Consensus {
+  bool achieved = 1;
+}
+
+message VoteRequest {
+  uint32 term = 1;    // candidate's term
+  uint32 candidateId = 2;   // candidate requesting vote
+  uint32 lastLogTerm = 3;   // term of candidate's last log entry
+  uint32 lastLogIndex = 4;    // index of candidate's last log entry
+}
+
+message VoteResponse {
+  uint32 term = 1;    // currentTerm, for candidate to update itself
+  bool voteGranted = 2;   // true means candidate received vote
+}
+
+message AppendEntriesRequest {
+  uint32 term = 1;    // leader’s term
+  uint32 leaderId = 2;    // so follower can redirect clients
+  uint32 prevLogIndex  = 3;   // index of log entry immediately preceding new ones
+  uint32 prevLogTerm = 4;   // term of prevLogIndex entry
+  repeated Entry entries = 5;    // log entries to store (empty for heartbeat; may send more than one for efficiency)
+  uint32 leaderCommit = 6;    // leader’s commitIndex
+}
+
+message AppendEntriesResponse {
+  uint32 term = 1;    // currentTerm, for leader to update itself
+  bool success  = 2;    // true if follower contained entry matching prevLogIndex and prevLogTerm
+}
+
+message Key {
+  bytes key = 1;
+}
+
+message Result {
+  bool status = 1;
+  optional Value value = 2;
+}
+
+message Value {
+  bytes value = 1;
+}
+
+message KeyValuePair {
+  Key key = 1;
+  Value value = 2;
+}
+
+message Empty {}
+
+message Entry {
+  uint32 term = 1;
+  Command command = 2;
+}
+
+message Command {
+  enum Op {
+    NOOP = 0;
+    GET = 1;
+    PUT = 2;
+    DELETE = 3;
+  }
+  Op op = 1;
+  optional Data data = 2;
+}
+
+message Data {
+  optional Key key = 1;
+  optional Value value = 2;
+}
+
+message Index {
+  uint32 index = 1;
+}

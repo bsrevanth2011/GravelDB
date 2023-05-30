@@ -1,0 +1,12 @@
+server:
+  stubs:
+    - instanceId: 1
+      target: "localhost:5001"
+    - instanceId: 2
+      target: "localhost:5002"
+    - instanceId: 3
+      target: "localhost:5003"
+    - instanceId: 4
+      target: "localhost:5004"
+    - instanceId: 5
+      target: "localhost:5005"
