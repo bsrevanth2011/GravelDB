@@ -46,17 +46,16 @@ public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase impl
     private ServerState serverState;
 
     public RaftServer(int instanceId,
-                      int currentTerm,
-                      int votedFor,
                       ServerStubConfig[] stubConfigs) throws RocksDBException {
 
         this.instanceId = instanceId;
-        this.currentTerm = currentTerm;
-        this.votedFor = votedFor;
         this.serverState = FOLLOWER;
         this.log = new PersistentLog();
+        this.currentTerm = log.getLastLogTerm();
         this.stateMachine = new StateMachine();
-        this.remoteServers = Arrays.stream(stubConfigs).map(ServerStub::new).toArray(ServerStub[]::new);
+        this.remoteServers = Arrays.stream(stubConfigs)
+                .map(stubConfig -> new ServerStub(stubConfig, log.getLastLogIndex() + 1))
+                .toArray(ServerStub[]::new);
         restartElectionTimer();
     }
 

@@ -12,9 +12,9 @@ public class ServerStub {
     private int matchIndex;
     private final ConsensusServerGrpc.ConsensusServerStub stub;
 
-    public ServerStub(ServerStubConfig stubConfig) {
+    public ServerStub(ServerStubConfig stubConfig, int nextIndex) {
         this.instanceId = stubConfig.instanceId();
-        this.nextIndex = stubConfig.nextIndex();
+        this.nextIndex = nextIndex;
         this.stub = ConsensusServerGrpc.newStub(ManagedChannelBuilder.forTarget(stubConfig.target()).usePlaintext().build());
     }
 

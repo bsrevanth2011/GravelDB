@@ -20,9 +20,8 @@ public class PersistentLog implements Log {
     public PersistentLog() throws RocksDBException {
         this.db = RocksDBService.getOrCreate("log", Index.class, Entry.class);
         this.metadataDB = RocksDBService.getOrCreate("logMetadata", String.class, LogMetaData.class);
-//        LogMetaData metadataSnapshot = metadataDB.get(LOG_METADATA);
-//        this.logMetaData = (metadataSnapshot != null) ? metadataSnapshot : new LogMetaData();
-        this.logMetaData = new LogMetaData();
+        LogMetaData metadataSnapshot = metadataDB.get(LOG_METADATA);
+        this.logMetaData = (metadataSnapshot != null) ? metadataSnapshot : new LogMetaData();
     }
 
     @Override
@@ -55,7 +54,7 @@ public class PersistentLog implements Log {
 
     @Override
     public void deleteEntry(int index) {
-        int lastLogIndex = index - 1;
+        int lastLogIndex = Math.min(index - 1, getLastLogIndex());
         int lastLogTerm = lastLogIndex > 0 ? getEntry(lastLogIndex).getTerm() : 0;
         db.delete(intToIndex(index));
         updateLogMetadata(lastLogIndex, lastLogTerm);
