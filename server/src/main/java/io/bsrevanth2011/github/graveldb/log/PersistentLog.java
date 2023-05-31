@@ -8,6 +8,7 @@ import org.eclipse.collections.api.factory.Lists;
 import org.rocksdb.RocksDBException;
 
 import java.util.List;
+import java.util.Objects;
 
 public class PersistentLog implements Log {
 
@@ -46,7 +47,7 @@ public class PersistentLog implements Log {
 
         List<Entry> entries = Lists.mutable.of();
         for (int idx = beginIndex; idx <= endIndex; idx++) {
-            entries.add(getEntry(idx));
+            entries.add(Objects.requireNonNull(getEntry(idx)));
         }
 
         return entries;
@@ -54,7 +55,7 @@ public class PersistentLog implements Log {
 
     @Override
     public void deleteEntry(int index) {
-        int lastLogIndex = Math.min(index - 1, getLastLogIndex());
+        int lastLogIndex = index - 1;
         int lastLogTerm = lastLogIndex > 0 ? getEntry(lastLogIndex).getTerm() : 0;
         db.delete(intToIndex(index));
         updateLogMetadata(lastLogIndex, lastLogTerm);

@@ -17,7 +17,7 @@ public class Main {
         int instanceId = Integer.parseInt(args[0]);
         int port = Integer.parseInt(args[1]);
 
-        List<ServerStubConfig> stubs = new ArrayList<>();
+        List<ServerStubConfig> stubConfigs = new ArrayList<>();
 
         YAMLConfiguration config = new YAMLConfiguration();
         try (InputStream configFile = Main.class.getClassLoader().getResourceAsStream("application.yml")) {
@@ -31,13 +31,13 @@ public class Main {
                     int id = peerConfig.getInt("instanceId");
                     String target = peerConfig.getString("target");
                     if (id == instanceId) continue;
-                    stubs.add(new ServerStubConfig(id, target));
+                    stubConfigs.add(new ServerStubConfig(id, target));
                 }
             }
         }
 
         RocksDBService.init("/Users/revanth/rocksdb/" + instanceId);
-        GravelDBServer gravelDBServer = new GravelDBServer(instanceId, port, stubs.toArray(new ServerStubConfig[0]));
+        GravelDBServer gravelDBServer = new GravelDBServer(instanceId, port, stubConfigs.toArray(new ServerStubConfig[0]));
         gravelDBServer.init();
     }
 }

@@ -13,12 +13,14 @@ public final class CountdownTimer {
     private ScheduledThreadPoolExecutor executor;
     private Future<?> scheduledFuture;
 
-    public void startCountdown(Runnable handler, long delay) {
+    @SuppressWarnings("UnusedReturnValue")
+    public long startCountdown(Runnable handler, long delay) {
         stopIfStarted();
         scheduledFuture = getScheduledThreadPoolExecutor()
                 .schedule(handler, delay, TimeUnit.MILLISECONDS);
         logger.debug("Started countdown timer with a " +
                 "trigger set to go off after a fixed delay of {} milliseconds from now", delay);
+        return delay;
     }
 
     public void schedule(Runnable handler, long fixedRate) {
