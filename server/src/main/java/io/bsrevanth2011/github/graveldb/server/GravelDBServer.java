@@ -23,7 +23,7 @@ public class GravelDBServer {
     public GravelDBServer(int instanceId, int port, ServerStubConfig[] stubConfigs) throws RocksDBException, IOException {
 
         RaftServer server = new RaftServer(instanceId, stubConfigs);
-        DBClient client = new DBClient(server);
+        RaftClient client = new RaftClient(server);
 
         this.server = ServerBuilder
                 .forPort(port)

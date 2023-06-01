@@ -8,7 +8,6 @@ package graveldb;
 
 // consensus service protocol buffers
 service ConsensusServer {
-  rpc RequestInstanceId(Info) returns (Info) {}
   rpc RequestVote(VoteRequest) returns (VoteResponse) {}
   rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse) {}
 }
@@ -17,15 +16,7 @@ service DatabaseService {
   rpc Get(Key) returns (Result) {}
   rpc Put(KeyValuePair) returns (Result) {}
   rpc Delete(Key) returns (Result) {}
-}
-
-message Info {
-  string instanceId = 1;
-  optional bool isLeader = 2;
-}
-
-message Consensus {
-  bool achieved = 1;
+  rpc RequestLeaderInfo(Empty) returns (LeaderInfo) {}
 }
 
 message VoteRequest {
@@ -59,8 +50,15 @@ message Key {
 }
 
 message Result {
-  bool status = 1;
+  Status status = 1;
+  enum Status {
+    SUCCESS = 0;
+    NOT_AN_ELECTED_LEADER = 1;
+    LEADER_NOT_ELECTED = 2;
+    DATA_NOT_FOUND = 3;
+  }
   optional Value value = 2;
+  optional LeaderInfo leaderInfo = 3;
 }
 
 message Value {
@@ -71,8 +69,6 @@ message KeyValuePair {
   Key key = 1;
   Value value = 2;
 }
-
-message Empty {}
 
 message Entry {
   uint32 term = 1;
@@ -97,4 +93,10 @@ message Data {
 
 message Index {
   uint32 index = 1;
+}
+
+message Empty {}
+
+message LeaderInfo {
+  uint32 leaderId = 1;
 }

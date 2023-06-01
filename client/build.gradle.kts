@@ -1,27 +1,5 @@
-import com.google.protobuf.gradle.id
-
 plugins {
     id("java")
-    id("com.google.protobuf") version "0.9.1"
-}
-
-protobuf {
-    protoc {
-        artifact = "com.google.protobuf:protoc:3.21.7"
-    }
-    plugins {
-        id("grpc") {
-            artifact = "io.grpc:protoc-gen-grpc-java:1.54.1"
-        }
-    }
-    generateProtoTasks {
-        ofSourceSet("main").forEach {
-            it.plugins {
-                // Apply the "grpc" plugin whose spec is defined above, without options.
-                id("grpc")
-            }
-        }
-    }
 }
 
 group = "io.bsrevanth2011.github"
@@ -32,6 +10,13 @@ repositories {
 }
 
 dependencies {
+
+    // protos
+    implementation(project(":api"))
+
+    // utilities
+    implementation("org.apache.commons:commons-configuration2:2.9.0")
+    implementation("org.yaml:snakeyaml:2.0")
 
     // grpc
     runtimeOnly("io.grpc:grpc-netty-shaded:1.54.1")
