@@ -29,7 +29,7 @@ A RocksDB based distributed key-value store implementing the Raft consensus algo
 
 ## Build and run
 
-- The config Yaml file in the project has a default 5 node cluster configuration.
+- The application.yml file in the project has a default 5 node cluster configuration.
 - Build the jar using Gradle Build Tool by executing the following command in the project root dir
 
   ```
