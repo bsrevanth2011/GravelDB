@@ -38,7 +38,6 @@ A RocksDB based distributed key-value store implementing the Raft consensus algo
 - Run 5 node cluster by executing the following commands in the project root dir:
 
   ```
-  gradle :server:shadowJar
   java -jar server/build/libs/server-1.0-SNAPSHOT-all.jar 1 5001 2>&1 server1.log &
   java -jar server/build/libs/server-1.0-SNAPSHOT-all.jar 2 5002 2>&1 server2.log &
   java -jar server/build/libs/server-1.0-SNAPSHOT-all.jar 3 5003 2>&1 server3.log &
