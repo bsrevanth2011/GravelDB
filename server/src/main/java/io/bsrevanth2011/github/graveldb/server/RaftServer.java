@@ -21,10 +21,11 @@ import org.slf4j.MDC;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Random;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
+import static io.bsrevanth2011.github.graveldb.server.GravelDBServerConfiguration.STATE_MACHINE_SYNC_FIXED_RATE_MILLIS;
 import static io.bsrevanth2011.github.graveldb.server.RaftServer.ServerState.FOLLOWER;
 
 @Getter
@@ -40,6 +41,8 @@ public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase impl
     private final StateMachine stateMachine;
     private final ServerStub[] remoteServers;
     private final CountdownTimer electionCountdown = new CountdownTimer();
+    private final ScheduledThreadPoolExecutor scheduledExecutor = new ScheduledThreadPoolExecutor(1,
+            (r, executor) -> logger.error("Error occurred while trying to apply pending entries to state machine"));
 
     private int leaderId;
     private int currentTerm;
@@ -66,6 +69,17 @@ public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase impl
         long delay = restartElectionTimer();
         MDC.setContextMap(Map.of(SERVER_STATE, getServerState().name()));
         logger.info("Started Raft server with an election timeout of {} milliseconds", delay);
+        scheduleStateMachinePeriodicSync();
+    }
+
+    @Override
+    public boolean isLeader() {
+        return getLeaderId() == getInstanceId();
+    }
+
+    @Override
+    public LeaderInfo getLeaderInfo() {
+        return LeaderInfo.newBuilder().setLeaderId(getLeaderId()).build();
     }
 
     @Override
@@ -380,11 +394,16 @@ public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase impl
                     .get();
             if (logReplicated) {
                 incrementCommitIndex();
+                incrementLastApplied();
             }
         } catch (InterruptedException | ExecutionException e) {
             logger.error("Error occurred := " + e);
             stepDown(getCurrentTerm());
         }
+    }
+
+    private void incrementLastApplied() {
+        setLastApplied(getLastApplied() + 1);
     }
 
     private void becomeLeader() {
@@ -435,35 +454,68 @@ public class RaftServer extends ConsensusServerGrpc.ConsensusServerImplBase impl
         restartElectionTimer();
     }
 
+    private void scheduleStateMachinePeriodicSync() {
+        logger.info("Started periodic sync process that applies pending log entries to state machine periodically");
+        scheduledExecutor.scheduleAtFixedRate(this::applyPendingEntriesToStateMachine,
+                0,
+                STATE_MACHINE_SYNC_FIXED_RATE_MILLIS,
+                TimeUnit.MILLISECONDS);
+    }
+
+    private void applyPendingEntriesToStateMachine() {
+        while (getLastApplied() < getCommitIndex()) {
+            int next = getLastApplied() + 1;
+            Command command = log.getEntry(next).getCommand();
+            switch (command.getOp()) {
+
+                case NOOP -> incrementLastApplied();
+                case PUT -> {
+                    Data data = command.getData();
+                    try {
+                        lock.lock();
+                        stateMachine.put(data.getKey(), data.getValue());
+                        incrementLastApplied();
+                    } finally {
+                        lock.unlock();
+                    }
+                }
+                case DELETE -> {
+                    Data data = command.getData();
+                    try {
+                        lock.lock();
+                        stateMachine.delete(data.getKey());
+                        incrementLastApplied();
+                    } finally {
+                        lock.unlock();
+                    }
+                }
+            }
+        }
+    }
+
     @Override
     public Value get(Key key) {
+        applyPendingEntriesToStateMachine();
         return stateMachine.get(key);
     }
 
     @Override
     public void put(Key key, Value value) {
         Entry entry = createPutEntry(key, value);
-        try {
-            boolean logReplicated = replicateLog(entry).get();
-            if (logReplicated) {
-                stateMachine.put(key, value);
-                incrementCommitIndex();
-            } else {
-                throw new ReplicationFailureException();
-            }
-        } catch (ExecutionException | InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+        commitEntry(entry);
     }
 
     @Override
     public void delete(Key key) {
         Entry entry = createDeleteEntry(key);
+        commitEntry(entry);
+    }
 
+    private void commitEntry(Entry entry) {
         try {
             boolean logReplicated = replicateLog(entry).get();
             if (logReplicated) {
-                stateMachine.delete(key);
+                logger.info("Log replicated. Applying to state machine");
                 incrementCommitIndex();
             } else {
                 throw new ReplicationFailureException();
