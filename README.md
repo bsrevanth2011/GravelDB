@@ -12,6 +12,7 @@ A RocksDB based distributed key-value store implementing the Raft consensus algo
 - [x] Leader Election
 - [x] Log Replication
 - [ ] Membership Changes
+- [ ] Log Compaction
 
 ## Tested and Working Correctly
 
