@@ -52,13 +52,8 @@ public class SimpleBlockingDBClient {
             return resultToNullableString(result.getValue());
         } else {
             if (result.getStatus().equals(Result.Status.NOT_AN_ELECTED_LEADER)) {
-                if (result.hasLeaderInfo()) {
-                    LeaderInfo leaderInfo = result.getLeaderInfo();
-                    this.stub = stubMap.get(leaderInfo.getLeaderId());
-                    return get(key);
-                } else {
-                    throw new RuntimeException("Unknown error");
-                }
+                updateLeader(result);
+                return get(key);
             } else if (result.getStatus().equals(Result.Status.DATA_NOT_FOUND)) {
                 return null;
             } else if (result.getStatus().equals(Result.Status.LEADER_NOT_ELECTED)) {
